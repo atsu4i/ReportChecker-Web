@@ -1,37 +1,56 @@
-# 症例要約 提出前セルフチェック（ブラウザ版 MVP）
+# 症例要約 提出前セルフチェック（ブラウザ版）
 
 Python もインストールも不要。**`index.html` をブラウザで開くだけ**で動く、専攻医向けの提出前チェックです。
-マスク版Word（.docx）をドラッグ＆ドロップすると、本文に残った実データ（具体的な日付・カルテID・氏名）を検出します。
+マスク版Word（.docx）をドラッグ＆ドロップすると、個人情報の残存に加えて表記・構成・書式まで、
+Python版 ReportChecker と同じルールでチェックします。
+
+**公開URL: https://atsu4i.github.io/ReportChecker-Web/**
 
 > **プライバシー**: ファイルは端末のブラウザ内だけで処理され、どこにもアップロードされません。
 > すべてクライアント側（JavaScript）で完結します。
 
 ## 使い方
 
-- **単体で開く**: `index.html` をダブルクリック（`file://` で開く）。`vendor/` を同じ場所に置いたまま配布してください。
-- **URL配布**: このフォルダを静的ホスティング（GitHub Pages 等）に置けば、URLを開くだけで使えます。
+- **URL配布（推奨）**: 上記 GitHub Pages のURLを開くだけ。
+- **単体で開く**: `index.html` をダブルクリック（`file://`）。`vendor/` と `js/` を同じ場所に置いたまま配布してください。
 
-## 現状（MVP のスコープ）
+## チェック内容（Python版フルと同一ルール）
 
-- ✅ .docx の症例テーブル抽出（`Docx.gs` の移植 / JSZip + DOMParser）
-- ✅ 個人情報チェック（`Pii.gs` の移植：絶対日付=ERROR、カルテID/氏名=WARN、相対表記は許容）
-- ✅ マスク版で空欄であるべきヘッダ欄（患者ID・受持期間・年齢）の実データ残存検出
-- ✅ 分野番号の記入確認
-- ✅ mammoth.js による Word プレビュー＋番号付きハイライト（指摘カードと相互移動）
-- ⏳ **未対応**: 表記・構成・NG表現・書式（明朝体/ポイント数/SpO2下付き）など全ルール
-  → 次段階（C: ルールをフル版と共通化してブラウザにも載せる）で対応予定。
-- ⚠️ 患者性別のヘッダ残存は現状未抽出（Python版フルは検出。C で解消）。
+- **個人情報**: 具体的な日付（西暦・和暦・月日）=ERROR、カルテID等の数字列・氏名らしき表現=WARN、
+  マスク版ヘッダ欄（患者ID・受持期間・年齢・性別）の実データ残存=ERROR、分野番号の未記入=ERROR。相対表記は許容。
+- **構成**: 必須セクション（主訴・現病歴・入院時所見・検査所見・鑑別診断・経過・家族への説明・退院後経過）。
+- **表記/NG表現**: にて／採血／〜と思われる／●●剤／カ月／体言＋あり 等、年齢呼称、検査名称、現症・検査の記載順。
+- **記号/スペース/略号/かな/薬用量**: 数値と単位のスペース、カンマ後スペース、全角/半角混在、μ、標準外括弧、句読点統一、略号統一、かな表記、小児薬用量。
+- **分量**: 症例要約の推定行数（30行以内・80%以上）。
+- **書式**: 日本語フォントが明朝体か、ポイント数（10.5 / 11）、SpO₂ 等の下付き表記。
 
 ## 構成
 
-| ファイル | 役割 |
+| パス | 役割 |
 | :---- | :---- |
-| `index.html` | 本体（UI + チェックロジック、インライン） |
+| `index.html` | 画面（シェル）＋スタイル |
+| `js/checker.js` | **チェックロジック本体**（Python版 `checker/` を移植した単一ソース。ブラウザ/Node 両対応） |
+| `js/app.js` | UI（ドロップ・症例カード・サマリ・連携ビュー・Markdown出力） |
 | `vendor/jszip.min.js` | .docx（ZIP）展開 |
 | `vendor/mammoth.browser.min.js` | Word→HTML プレビュー変換 |
+| `test/` | Python版との一致を検証するゴールデン差分ハーネス（配布物ではない） |
 
-## ロジックの出所
+## ロジックの出所と検証
 
-チェックロジックは Slack Bot（Google Apps Script = JavaScript）側の
-`slack_gas/Pii.gs`（PII検出）と `slack_gas/Docx.gs`（.docx抽出）をブラウザ用に移植したものです。
-さらに元をたどると Python 版 `checker/rules/pii.py` / `checker/parser.py` と同一ロジックです。
+`js/checker.js` は Python版 ReportChecker の `checker/`（parser / 各ルール / format_check / layout / runner の masked 経路）を
+JavaScript に移植した「単一ソース」です。`.docx` は JSZip で展開し `word/document.xml` を DOMParser で解析します。
+
+### Python版との一致検証
+
+`test/` のハーネスで、同じサンプル群を JS版と Python版（マスクモード）に通し、
+`(category, severity, message, match_text)` 単位で突き合わせています。
+
+```bash
+cd test && npm install
+node run_js.js ../../ReportChecker/samples/*.docx > js.json
+python run_py.py ../../ReportChecker/samples/*.docx > py.json   # フル版リポジトリの checker/ を使用
+python diff.py js.json py.json
+```
+
+23サンプルで **253 件が完全一致**。差分は「日本語の直後に続くラテン表記（`100mg投与`・非下付きの `SpO2` 等）」を
+JS版が追加検出する 6 件のみで、これは Python の Unicode 単語境界 `\b` の取りこぼしを JS 版が拾うもの（＝より厳密）です。

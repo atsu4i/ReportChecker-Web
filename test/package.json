@@ -1,0 +1,10 @@
+{
+  "name": "reportchecker-web-test",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Golden-diff harness (JS vs Python). Not shipped.",
+  "dependencies": {
+    "jszip": "^3.10.1",
+    "@xmldom/xmldom": "^0.8.10"
+  }
+}

@@ -2,3 +2,9 @@
 _test_*.docx
 ~$*.docx
 *.log
+
+# テストハーネスの生成物・依存（スクリプト本体はコミットする）
+test/node_modules/
+test/js.json
+test/py.json
+test/*.err
