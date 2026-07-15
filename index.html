@@ -12,8 +12,8 @@
     --warn: #d97706; --warn-bg: #fef3c7; --warn-hl: #fde68a;
     --info: #2563eb; --info-bg: #dbeafe; --info-hl: #bfdbfe;
     --ok: #16a34a; --line: #d1d5db; --ink: #1f2937; --muted: #6b7280;
-    /* Word A4 縦1ページ相当＋数行の余裕（約1ページ＝1123px に 6行分ほど加算） */
-    --page-h: 1260px;
+    /* プレビュー高さ（横幅を広げたぶん、やや低めでも1ページ相当が収まる） */
+    --page-h: 1050px;
   }
   * { box-sizing: border-box; }
   body {
@@ -21,7 +21,7 @@
     font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
     color: var(--ink); background: #f8fafc; line-height: 1.6;
   }
-  .wrap { max-width: 1200px; margin: 0 auto; padding: 20px 18px 60px; }
+  .wrap { max-width: 1560px; margin: 0 auto; padding: 20px 22px 60px; }
   h1 { font-size: 22px; margin: 0 0 4px; }
   .lede { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
   .notice { border: 1px solid var(--info-hl); background: #eff6ff; color: #1e3a8a; border-radius: 8px; padding: 12px 14px; font-size: 13px; margin: 0 0 16px; }
