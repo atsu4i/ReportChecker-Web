@@ -790,128 +790,11 @@
   function isBlank(c) { return !((c.summary || "").trim() || (c.diagnosis || "").trim()); }
 
   // ==========================================================================
-  // 書式（format_check.py）
+  // 書式（format_check.py）— 廃止（2026-07-15、KIDS移行）
+  //   KIDSはプレーンテキスト入力で、フォント・ポイント数・SpO2の下付き等の書式を
+  //   表現できない。よって書式カテゴリのチェック（checkFormat）は削除した。
+  //   分量（layout）は長さの目安として残す。
   // ==========================================================================
-  function runIsSubscript(rPr) {
-    if (!rPr) return false;
-    var vert = directChildren(rPr, "vertAlign")[0];
-    if (!vert) return false;
-    return wAttr(vert, "val") === "subscript";
-  }
-  function isMincho(name) {
-    if (!name) return null;
-    var lname = name.toLowerCase();
-    if (lname.indexOf("mincho") >= 0 || name.indexOf("明朝") >= 0 || lname.indexOf("serif") >= 0) return true;
-    if (lname.indexOf("gothic") >= 0 || name.indexOf("ゴシック") >= 0 || lname.indexOf("sans") >= 0 || lname.indexOf("meiryo") >= 0) return false;
-    return null;
-  }
-  var STANDARD_SIZES = [10.5, 11.0];
-  function collectInspectParagraphs(bodyEl, bodyTables) {
-    if (bodyTables.length === 0) return descendants(bodyEl, "p");
-    var first = bodyTables[0];
-    if (!isTemplateTable(first)) return descendants(bodyEl, "p");
-    var rows = directChildren(first, "tr");
-    var targets = [];
-    [4, 5, 6].forEach(function (ri) {
-      if (ri >= rows.length) return;
-      rowCells(rows[ri]).forEach(function (tc) {
-        directChildren(tc, "p").forEach(function (p) { targets.push(p); });
-      });
-    });
-    return targets;
-  }
-  function checkFormat(bodyEl, bodyTables, result) {
-    var fontsJp = {};      // name -> snippet
-    var fontsJpOrder = [];
-    var fontsEn = {};
-    var nonStdSize = [];   // [size, snippet]
-    var seenSizePara = {};
-    var formattedChars = []; // [ch, isSub]
-
-    var paragraphs = collectInspectParagraphs(bodyEl, bodyTables);
-    paragraphs.forEach(function (p) {
-      var paraText = "";
-      directChildren(p, "r").forEach(function (r) {
-        directChildren(r, "t").forEach(function (t) { paraText += t.textContent || ""; });
-      });
-      var snippetText = truncate(paraText.replace(/\n/g, " ").trim(), 70);
-
-      var paraSizes = {};
-      directChildren(p, "r").forEach(function (r) {
-        var rPr = directChildren(r, "rPr")[0];
-        var runText = "";
-        directChildren(r, "t").forEach(function (t) { runText += t.textContent || ""; });
-        var isSub = runIsSubscript(rPr);
-        for (var ci = 0; ci < runText.length; ci++) formattedChars.push([runText[ci], isSub]);
-        if (!rPr) return;
-        var sz = directChildren(rPr, "sz")[0];
-        if (sz) {
-          var val = wAttr(sz, "val");
-          if (val) {
-            var sizePt = parseInt(val, 10) / 2.0;
-            if (STANDARD_SIZES.indexOf(sizePt) < 0) paraSizes[sizePt] = true;
-          }
-        }
-        var rFonts = directChildren(rPr, "rFonts")[0];
-        if (rFonts) {
-          var ea = wAttr(rFonts, "eastAsia");
-          if (ea && snippetText && !(ea in fontsJp)) { fontsJp[ea] = snippetText; fontsJpOrder.push(ea); }
-          ["ascii", "hAnsi"].forEach(function (attr) {
-            var en = wAttr(rFonts, attr);
-            if (en) fontsEn[en] = true;
-          });
-        }
-      });
-      Object.keys(paraSizes).forEach(function (sizeStr) {
-        if (!snippetText) return;
-        var key = sizeStr + " " + snippetText;
-        if (seenSizePara[key]) return;
-        seenSizePara[key] = true;
-        nonStdSize.push([parseFloat(sizeStr), snippetText]);
-      });
-    });
-
-    nonStdSize.forEach(function (row) {
-      result.add({
-        category: "書式", severity: SEVERITY_INFO,
-        message: pyFloat(row[0]) + "pt（標準は 10.5 もしくは 11pt）が使われています",
-        snippet: row[1], suggestion: "該当箇所のフォントサイズを 10.5pt もしくは 11pt に揃える",
-      });
-    });
-    fontsJpOrder.forEach(function (font) {
-      if (isMincho(font)) return;
-      result.add({
-        category: "書式", severity: SEVERITY_INFO,
-        message: "日本語フォントに明朝体以外が使われています: " + font,
-        snippet: fontsJp[font], suggestion: "本文は明朝体（游明朝・ヒラギノ明朝など）が原則",
-      });
-    });
-    var common = fontsJpOrder.filter(function (f) { return fontsEn[f]; }).sort();
-    if (common.length) {
-      result.add({
-        category: "書式", severity: SEVERITY_INFO,
-        message: "日本語と英数字で同じフォントが使われている: " + common.join(", "),
-        suggestion: "日本語は明朝体（游明朝など）、英数字は Times New Roman などに分けて設定する",
-      });
-    }
-
-    var fullText = formattedChars.map(function (x) { return x[0]; }).join("");
-    var subRe = /\b(SpO|FIO|FiO|PaO|PaCO|HCO|NH)([0-9])\b/g;
-    eachMatch(subRe, fullText, function (m) {
-      var digitStart = m.index + m[1].length;
-      var digitEnd = digitStart + m[2].length;
-      var allSub = true;
-      for (var i = digitStart; i < digitEnd; i++) {
-        if (!formattedChars[i] || !formattedChars[i][1]) { allSub = false; break; }
-      }
-      if (allSub) return;
-      result.add({
-        category: "書式", severity: SEVERITY_WARN,
-        message: "「" + m[0] + "」の数字を下付き文字で表記する",
-        snippet: m[0], match_text: m[0], suggestion: m[1] + "<sub>" + m[2] + "</sub>",
-      });
-    });
-  }
 
   // ==========================================================================
   // 分量（layout.py）
@@ -1076,7 +959,6 @@
           message: "このファイルには記入済みの症例が見当たりません",
           suggestion: "テンプレートに症例情報を記入してから再度アップロードしてください",
         });
-        checkFormat(bodyEl, bodyTables, result);
         return { result: result, caseObj: null, templateOk: templateOk };
       }
       if (filled.length > 1) {
@@ -1095,7 +977,6 @@
       if (caseTableEl && directChildren(caseTableEl, "tr").length >= 7) {
         checkSummaryLayout(caseTableEl, result);
       }
-      checkFormat(bodyEl, bodyTables, result);
       return { result: result, caseObj: caseObj, templateOk: templateOk };
     }
 
@@ -1108,7 +989,6 @@
     checkPediatricDose(text, result);
     checkStructure(text, result, "");
     checkPii(text, result);
-    checkFormat(bodyEl, bodyTables, result);
     return { result: result, caseObj: null, templateOk: templateOk };
   }
 

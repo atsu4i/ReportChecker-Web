@@ -19,6 +19,14 @@ def key(fnd):
 def main():
     js = load(sys.argv[1])
     py = load(sys.argv[2])
+    # 第3引数以降: 比較から除外するカテゴリ（例: 書式）
+    exclude = set(sys.argv[3:])
+
+    def keep(findings):
+        return [f for f in findings if f["category"] not in exclude]
+    for d in (js, py):
+        for f in d.values():
+            f["findings"] = keep(f.get("findings", []))
 
     files = sorted(set(js) | set(py))
     total_only_js = 0
